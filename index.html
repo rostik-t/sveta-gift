@@ -334,6 +334,63 @@
   font-size: 18px;
 }
 
+    /* контейнер для ютуб-плеера */
+.yt-host{
+  position: absolute;
+  inset: 0;
+}
+
+/* Оверлей “Поверни телефон” (по центру) */
+.rotate-overlay{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none; /* не мешает тапать по видео */
+  background: rgba(0,0,0,.12);
+}
+
+.rotate-box{
+  pointer-events: none;
+  text-align: center;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 14px 40px rgba(0,0,0,.35);
+}
+
+.rotate-text{
+  font-weight: 700;
+  letter-spacing: .01em;
+  margin-bottom: 10px;
+  color: rgba(255,255,255,.92);
+}
+
+.rotate-gif{
+  width: 120px;
+  height: auto;
+  display: inline-block;
+}
+
+.rotate-svg{
+  width: 120px;
+  height: 120px;
+  display: inline-block;
+}
+
+.rotate-svg .spin{
+  transform-origin: 60px 60px;
+  animation: phoneSpin 1.6s ease-in-out infinite;
+}
+
+@keyframes phoneSpin{
+  0%,100%{ transform: rotate(0deg) }
+  50%{ transform: rotate(90deg) }
+}
+
   </style>
 </head>
 <body>
@@ -376,21 +433,42 @@
 
 <!-- Страница с видео -->
 <section class="page video-page">
-  <div class="fullscreen-video reveal" data-reveal>
-    <iframe
-      src="https://www.youtube.com/embed/DtwRLhFOT5E?rel=0&modestbranding=1"
-      title="Вестсайдская история"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      allowfullscreen
-    ></iframe>
+<div class="fullscreen-video reveal" data-reveal>
+  <!-- ВАЖНО: вместо iframe — контейнер, куда API вставит плеер -->
+  <div id="ytPlayer" class="yt-host" aria-label="YouTube player"></div>
 
-    <div class="video-overlay">
-      <div class="video-caption stagger" data-stagger>
-        <div>Смотреть лучше со звуком 🔊</div>
-        <div class="sign">От Ростислава и Юлианы.</div>
-      </div>
+  <!-- Подсказка “Поверни телефон” -->
+  <div id="rotateOverlay" class="rotate-overlay" hidden>
+    <div class="rotate-box">
+      <div class="rotate-text">Поверни телефон горизонтально</div>
+
+      <!-- Вариант 1: твоя гифка (положи рядом файл phone-rotate.gif) -->
+      <img
+        class="rotate-gif"
+        src="phone-rotate.gif"
+        alt="Поверни телефон"
+        loading="lazy"
+        onerror="this.style.display='none'; document.getElementById('rotateSvg').style.display='block';"
+      />
+
+      <!-- Вариант 2 (fallback): анимированная иконка, если гифки нет -->
+      <svg id="rotateSvg" class="rotate-svg" viewBox="0 0 120 120" style="display:none" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="0" x2="1">
+            <stop offset="0" stop-color="rgba(255,204,102,.9)"/>
+            <stop offset="1" stop-color="rgba(255,95,162,.9)"/>
+          </linearGradient>
+        </defs>
+        <g class="spin">
+          <rect x="42" y="26" width="36" height="68" rx="8" fill="rgba(255,255,255,.12)" stroke="url(#g)" stroke-width="3"/>
+          <circle cx="60" cy="86" r="3" fill="rgba(255,255,255,.75)"/>
+        </g>
+        <path d="M92 58c0 18-14 32-32 32" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="4" stroke-linecap="round"/>
+        <path d="M62 90l-8 2 3-8" fill="rgba(255,255,255,.6)"/>
+      </svg>
     </div>
   </div>
+</div>
 </section>
 
 
@@ -483,6 +561,53 @@
         raf = 0;
       });
     }, { passive: true });
+
+    // --- YouTube IFrame API: показываем подсказку только когда видео играет и ориентация портретная ---
+let ytPlayerInstance = null;
+let isPlaying = false;
+
+const rotateOverlay = document.getElementById('rotateOverlay');
+const isPortrait = () => window.matchMedia('(orientation: portrait)').matches;
+
+// Показываем оверлей только когда: играет + портрет
+function updateRotateOverlay() {
+  if (!rotateOverlay) return;
+  const shouldShow = isPlaying && isPortrait();
+  rotateOverlay.hidden = !shouldShow;
+}
+
+// Подключаем API
+(function loadYT(){
+  const tag = document.createElement('script');
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+})();
+
+// Этот коллбек вызывает сам API
+window.onYouTubeIframeAPIReady = function () {
+  ytPlayerInstance = new YT.Player('ytPlayer', {
+    videoId: 'DtwRLhFOT5E',
+    playerVars: {
+      rel: 0,
+      modestbranding: 1,
+      playsinline: 1
+    },
+    events: {
+      onStateChange: (e) => {
+        // 1 = playing, 2 = paused, 0 = ended
+        isPlaying = (e.data === YT.PlayerState.PLAYING);
+        if (e.data === YT.PlayerState.ENDED || e.data === YT.PlayerState.PAUSED) {
+          isPlaying = false;
+        }
+        updateRotateOverlay();
+      }
+    }
+  });
+};
+
+// Обновлять при смене ориентации/размера
+window.addEventListener('orientationchange', updateRotateOverlay);
+window.addEventListener('resize', updateRotateOverlay);
   </script>
 </body>
 </html>
