@@ -288,45 +288,43 @@
 
 .fullscreen-video{
   position: relative;
-  width: 100%;
+  width: 100vw;
   height: 100svh;
   overflow: hidden;
   background: black;
 }
 
-/* магия правильных пропорций */
+/* 16:9 cover */
 .fullscreen-video iframe{
   position: absolute;
   top: 50%;
   left: 50%;
   width: 100vw;
-  height: 56.25vw; /* 16:9 */
+  height: 56.25vw;        /* 16:9 */
   min-height: 100svh;
-  min-width: 177.78svh; /* 16/9 */
+  min-width: 177.78svh;  /* 16/9 */
   transform: translate(-50%, -50%);
   border: 0;
 }
 
-/* затемнение + текст поверх */
+/* overlay */
 .video-overlay{
   position: absolute;
-  pointer-events: none; /* ⬅️ ВАЖНО */
   inset: 0;
+  pointer-events: none;
   background: linear-gradient(
     to bottom,
     rgba(0,0,0,.45),
-    rgba(0,0,0,.25) 40%,
+    rgba(0,0,0,.2) 40%,
     rgba(0,0,0,.55)
   );
-  display: flex;
-  align-items: flex-end;
-  padding: 24px 16px 32px;
 }
 
 .video-caption{
-  pointer-events: auto; /* если вдруг потом добавишь кнопку */
-  max-width: 980px;
-  margin: 0 auto;
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
   text-align: center;
   color: rgba(255,255,255,.9);
 }
@@ -374,6 +372,7 @@
         </div>
       </div>
     </section>
+  </div>
 
 <!-- Страница с видео -->
 <section class="page video-page">
@@ -396,6 +395,7 @@
 
 
     <!-- Страница 2 -->
+  <div class="wrap">
     <section class="page">
       <div class="hero reveal" data-reveal>
         <div class="grid">
