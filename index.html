@@ -432,7 +432,7 @@
   </div>
 
 <!-- Страница с видео -->
-<section class="page video-page">
+<section class="page video-page" id="videoPage">
 <div class="fullscreen-video reveal" data-reveal>
   <!-- ВАЖНО: вместо iframe — контейнер, куда API вставит плеер -->
   <div id="ytPlayer" class="yt-host" aria-label="YouTube player"></div>
@@ -565,25 +565,42 @@
     // --- YouTube IFrame API: показываем подсказку только когда видео играет и ориентация портретная ---
 let ytPlayerInstance = null;
 let isPlaying = false;
+let isVideoPageVisible = false;
 
 const rotateOverlay = document.getElementById('rotateOverlay');
-const isPortrait = () => window.matchMedia('(orientation: portrait)').matches;
+const videoPage = document.getElementById('videoPage');
 
-// Показываем оверлей только когда: играет + портрет
+// Самый надёжный детектор ориентации
+const isPortrait = () => window.innerHeight >= window.innerWidth;
+
+// Показываем оверлей только когда: играет + портрет + видео-страница реально видна
 function updateRotateOverlay() {
   if (!rotateOverlay) return;
-  const shouldShow = isPlaying && isPortrait();
+  const shouldShow = isPlaying && isPortrait() && isVideoPageVisible;
   rotateOverlay.hidden = !shouldShow;
 }
 
-// Подключаем API
+// Отслеживаем, что видео-страница “активна/видима”
+if (videoPage) {
+  const pageObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.target !== videoPage) continue;
+      // Считаем “видима”, когда хотя бы 70% страницы в viewport
+      isVideoPageVisible = e.intersectionRatio >= 0.7;
+      updateRotateOverlay();
+    }
+  }, { threshold: [0, 0.3, 0.5, 0.7, 0.9, 1] });
+
+  pageObserver.observe(videoPage);
+}
+
+// Подключаем YouTube API
 (function loadYT(){
   const tag = document.createElement('script');
   tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
 })();
 
-// Этот коллбек вызывает сам API
 window.onYouTubeIframeAPIReady = function () {
   ytPlayerInstance = new YT.Player('ytPlayer', {
     videoId: 'DtwRLhFOT5E',
@@ -594,9 +611,9 @@ window.onYouTubeIframeAPIReady = function () {
     },
     events: {
       onStateChange: (e) => {
-        // 1 = playing, 2 = paused, 0 = ended
         isPlaying = (e.data === YT.PlayerState.PLAYING);
-        if (e.data === YT.PlayerState.ENDED || e.data === YT.PlayerState.PAUSED) {
+        // пауза/конец — убираем подсказку
+        if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
           isPlaying = false;
         }
         updateRotateOverlay();
@@ -605,9 +622,11 @@ window.onYouTubeIframeAPIReady = function () {
   });
 };
 
-// Обновлять при смене ориентации/размера
-window.addEventListener('orientationchange', updateRotateOverlay);
-window.addEventListener('resize', updateRotateOverlay);
+// iOS иногда не шлёт orientationchange стабильно — поэтому слушаем всё полезное
+window.addEventListener('resize', updateRotateOverlay, { passive: true });
+window.addEventListener('orientationchange', updateRotateOverlay, { passive: true });
+window.addEventListener('scroll', updateRotateOverlay, { passive: true });
+document.addEventListener('visibilitychange', updateRotateOverlay);
   </script>
 </body>
 </html>
