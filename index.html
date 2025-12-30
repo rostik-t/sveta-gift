@@ -386,6 +386,8 @@
   animation: phoneSpin 1.6s ease-in-out infinite;
 }
 
+[hidden]{ display:none !important; }
+
 @keyframes phoneSpin{
   0%,100%{ transform: rotate(0deg) }
   50%{ transform: rotate(90deg) }
@@ -440,7 +442,7 @@
   <!-- Подсказка “Поверни телефон” -->
   <div id="rotateOverlay" class="rotate-overlay" hidden>
     <div class="rotate-box">
-      <div class="rotate-text">Поверни телефон горизонтально</div>
+      <div class="rotate-text">Поверни телефон горизонтально2</div>
 
       <!-- Вариант 1: твоя гифка (положи рядом файл phone-rotate.gif) -->
       <img
@@ -524,35 +526,56 @@
   </div>
 
   <script>
-    // Появление секций при прокрутке
-    const revealEls = document.querySelectorAll('[data-reveal]');
-    const staggerEls = document.querySelectorAll('[data-stagger]');
+    /* =========================
+   Scroll reveal (появление секций)
+   ========================= */
+(() => {
+  const revealEls = document.querySelectorAll('[data-reveal]');
+  const staggerEls = document.querySelectorAll('[data-stagger]');
 
-    const io = new IntersectionObserver((entries) => {
+  // Секции/блоки
+  const io = new IntersectionObserver(
+    (entries) => {
       for (const e of entries) {
         if (e.isIntersecting) {
           e.target.classList.add('in');
-          // Если внутри есть data-stagger — включаем ступенчатую анимацию
+
+          // Включаем "лесенку" для вложенного stagger
           const st = e.target.querySelector?.('[data-stagger]');
           if (st) st.classList.add('in');
+
+          // чтобы не дергалось туда-сюда
+          io.unobserve(e.target);
         }
       }
-    }, { threshold: 0.18 });
+    },
+    { threshold: 0.01, rootMargin: '0px 0px -20% 0px' }
+  );
 
-    revealEls.forEach(el => io.observe(el));
+  revealEls.forEach((el) => io.observe(el));
 
-    // Если где-то stagger отдельно (не вложен) — тоже наблюдаем
-    const ioSt = new IntersectionObserver((entries) => {
+  // Если stagger используется отдельно
+  const ioSt = new IntersectionObserver(
+    (entries) => {
       for (const e of entries) {
-        if (e.isIntersecting) e.target.classList.add('in');
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          ioSt.unobserve(e.target);
+        }
       }
-    }, { threshold: 0.25 });
-    staggerEls.forEach(el => ioSt.observe(el));
+    },
+    { threshold: 0.2 }
+  );
 
-    // Лёгкий параллакс фона (без лагов)
-    const aurora = document.querySelector('.aurora');
-    let raf = 0;
-    window.addEventListener('scroll', () => {
+  staggerEls.forEach((el) => ioSt.observe(el));
+
+  // Лёгкий параллакс фона
+  const aurora = document.querySelector('.aurora');
+  let raf = 0;
+
+  window.addEventListener(
+    'scroll',
+    () => {
       if (!aurora) return;
       if (raf) return;
       raf = requestAnimationFrame(() => {
@@ -560,73 +583,119 @@
         aurora.style.transform = `translate3d(0, ${y * 0.06}px, 0)`;
         raf = 0;
       });
-    }, { passive: true });
+    },
+    { passive: true }
+  );
+})();
 
-    // --- YouTube IFrame API: показываем подсказку только когда видео играет и ориентация портретная ---
+/* =========================
+   Fullscreen YouTube + overlay "Поверни телефон"
+   Требования:
+   - overlay показывается ТОЛЬКО когда видео играет
+   - overlay показывается ТОЛЬКО в портретной ориентации
+   - overlay показывается ТОЛЬКО когда видео-секция видима (>=70%)
+   ========================= */
+
 let ytPlayerInstance = null;
+
 let isPlaying = false;
 let isVideoPageVisible = false;
+let pollTimer = null;
 
 const rotateOverlay = document.getElementById('rotateOverlay');
-const videoPage = document.getElementById('videoPage');
+const videoPage = document.getElementById('videoPage'); // <section id="videoPage" ...>
 
-// Самый надёжный детектор ориентации
-const isPortrait = () => window.innerHeight >= window.innerWidth;
+// Надежное определение портрета (iOS-friendly)
+function isPortrait() {
+  const vv = window.visualViewport;
+  const w = vv?.width ?? window.innerWidth;
+  const h = vv?.height ?? window.innerHeight;
+  return h >= w;
+}
 
-// Показываем оверлей только когда: играет + портрет + видео-страница реально видна
 function updateRotateOverlay() {
   if (!rotateOverlay) return;
   const shouldShow = isPlaying && isPortrait() && isVideoPageVisible;
   rotateOverlay.hidden = !shouldShow;
 }
 
-// Отслеживаем, что видео-страница “активна/видима”
+// Polling — пока видео играет, каждые 200мс проверяем ориентацию/видимость
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(updateRotateOverlay, 200);
+}
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+// Наблюдаем, что видео-секция реально на экране
 if (videoPage) {
-  const pageObserver = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.target !== videoPage) continue;
-      // Считаем “видима”, когда хотя бы 70% страницы в viewport
-      isVideoPageVisible = e.intersectionRatio >= 0.7;
-      updateRotateOverlay();
-    }
-  }, { threshold: [0, 0.3, 0.5, 0.7, 0.9, 1] });
+  const pageObserver = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.target !== videoPage) continue;
+        isVideoPageVisible = e.intersectionRatio >= 0.7;
+        updateRotateOverlay();
+      }
+    },
+    { threshold: [0, 0.3, 0.5, 0.7, 0.9, 1] }
+  );
 
   pageObserver.observe(videoPage);
 }
 
-// Подключаем YouTube API
-(function loadYT(){
+// События (на всякий случай)
+window.addEventListener('resize', updateRotateOverlay, { passive: true });
+window.addEventListener('orientationchange', updateRotateOverlay, { passive: true });
+window.addEventListener('scroll', updateRotateOverlay, { passive: true });
+document.addEventListener('visibilitychange', updateRotateOverlay);
+
+// Подключаем YouTube IFrame API
+(function loadYT() {
   const tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
+  tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
 })();
 
+// Обработчик состояния плеера
+function onPlayerStateChange(e) {
+  // PLAYING
+  if (e.data === YT.PlayerState.PLAYING) {
+    isPlaying = true;
+    startPolling();
+    updateRotateOverlay();
+    return;
+  }
+
+  // PAUSED / ENDED / другие состояния — останавливаем
+  if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+    isPlaying = false;
+    stopPolling();
+    updateRotateOverlay();
+    return;
+  }
+
+  // BUFFERING / CUED etc — просто обновим
+  updateRotateOverlay();
+}
+
+// Этот коллбек вызывает сам YouTube API после загрузки
 window.onYouTubeIframeAPIReady = function () {
   ytPlayerInstance = new YT.Player('ytPlayer', {
     videoId: 'DtwRLhFOT5E',
     playerVars: {
       rel: 0,
       modestbranding: 1,
-      playsinline: 1
+      playsinline: 1,
     },
     events: {
-      onStateChange: (e) => {
-        isPlaying = (e.data === YT.PlayerState.PLAYING);
-        // пауза/конец — убираем подсказку
-        if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
-          isPlaying = false;
-        }
-        updateRotateOverlay();
-      }
-    }
+      onStateChange: onPlayerStateChange,
+    },
   });
 };
 
-// iOS иногда не шлёт orientationchange стабильно — поэтому слушаем всё полезное
-window.addEventListener('resize', updateRotateOverlay, { passive: true });
-window.addEventListener('orientationchange', updateRotateOverlay, { passive: true });
-window.addEventListener('scroll', updateRotateOverlay, { passive: true });
-document.addEventListener('visibilitychange', updateRotateOverlay);
   </script>
 </body>
 </html>
